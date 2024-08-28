@@ -11,6 +11,28 @@ pub mod mux {
     use std::pin::Pin;
     use std::ptr::NonNull;
 
+    struct DroppableWriterPtr {
+        writer: ffi::mux::WriterNonNullPtr,
+    }
+
+    impl DroppableWriterPtr {
+        unsafe fn new(writer: ffi::mux::WriterNonNullPtr) -> Self {
+            Self { writer }
+        }
+
+        fn as_ptr(&self) -> ffi::mux::WriterMutPtr {
+            self.writer.as_ptr()
+        }
+    }
+
+    impl Drop for DroppableWriterPtr {
+        fn drop(&mut self) {
+            unsafe {
+                ffi::mux::delete_writer(self.writer.as_ptr());
+            }
+        }
+    }
+
     /// Structure for writing a muxed WebM stream to the user-supplied write destination `T`.
     ///
     /// `T` may be a file, an `std::io::Cursor` over a byte array, or anything implementing the [`Write`] trait.
@@ -23,7 +45,7 @@ pub mod mux {
         T: Write,
     {
         writer_data: Pin<Box<MuxWriterData<T>>>,
-        mkv_writer: ffi::mux::WriterNonNullPtr,
+        mkv_writer: DroppableWriterPtr,
     }
 
     unsafe impl<T: Send + Write> Send for Writer<T> {}
@@ -55,11 +77,9 @@ pub mod mux {
         /// Consumes this [`Writer`], and returns the user-supplied write destination
         /// that it was created with.
         #[must_use]
-        pub fn unwrap(self) -> T {
-            unsafe {
-                ffi::mux::delete_writer(self.mkv_writer.as_ptr());
-                Pin::into_inner_unchecked(self.writer_data).dest
-            }
+        pub fn into_inner(self) -> T {
+            let Self { writer_data, .. } = self;
+            unsafe { Pin::into_inner_unchecked(writer_data).dest }
         }
 
         fn make_writer(
@@ -108,7 +128,7 @@ pub mod mux {
 
             Writer {
                 writer_data,
-                mkv_writer: NonNull::new(mkv_writer).unwrap(),
+                mkv_writer: unsafe { DroppableWriterPtr::new(NonNull::new(mkv_writer).unwrap()) },
             }
         }
     }
@@ -141,6 +161,7 @@ pub mod mux {
         }
     }
 
+    // MUSTFIX: Needed?
     #[doc(hidden)]
     pub trait MkvWriter {
         fn mkv_writer(&self) -> ffi::mux::WriterMutPtr;
@@ -155,19 +176,20 @@ pub mod mux {
         }
     }
 
+    // MUSTFIX: Assert numbers are [1, 126] as per Matroska limitations
     #[derive(Clone, Copy, PartialEq, Eq)]
-    pub struct VideoTrackId(ffi::mux::TrackNum);
+    pub struct VideoTrackNum(ffi::mux::TrackNum);
 
-    impl VideoTrackId {
+    impl VideoTrackNum {
         pub fn as_track_number(&self) -> TrackNum {
             self.0
         }
     }
 
     #[derive(Clone, Copy, PartialEq, Eq)]
-    pub struct AudioTrackId(ffi::mux::TrackNum);
+    pub struct AudioTrackNum(ffi::mux::TrackNum);
 
-    impl AudioTrackId {
+    impl AudioTrackNum {
         pub fn as_track_number(&self) -> TrackNum {
             self.0
         }
@@ -269,9 +291,9 @@ pub mod mux {
             height: u32,
             track_num: Option<i32>,
             codec: VideoCodecId,
-        ) -> Result<VideoTrackId, Error> {
+        ) -> Result<VideoTrackNum, Error> {
             // MUSTFIX: Do we really need the ability to dictate track_num?
-            let mut id_out: TrackNum = 0;
+            let mut track_num_out: TrackNum = 0;
             let result = unsafe {
                 ffi::mux::segment_add_video_track(
                     self.segment_ptr(),
@@ -279,14 +301,14 @@ pub mod mux {
                     height as i32,
                     track_num.unwrap_or(0),
                     codec.get_id(),
-                    &mut id_out,
+                    &mut track_num_out,
                 )
             };
 
             match result {
                 RESULT_OK => {
-                    assert_ne!(id_out, 0);
-                    Ok(VideoTrackId(id_out))
+                    assert_ne!(track_num_out, 0);
+                    Ok(VideoTrackNum(track_num_out))
                 }
                 _ => Err(Error::Unknown),
             }
@@ -318,8 +340,8 @@ pub mod mux {
             channels: i32,
             track_num: Option<i32>,
             codec: AudioCodecId,
-        ) -> Result<AudioTrackId, Error> {
-            let mut id_out: TrackNum = 0;
+        ) -> Result<AudioTrackNum, Error> {
+            let mut track_num_out: TrackNum = 0;
             let result = unsafe {
                 ffi::mux::segment_add_audio_track(
                     self.segment_ptr(),
@@ -327,14 +349,14 @@ pub mod mux {
                     channels,
                     track_num.unwrap_or(0),
                     codec.get_id(),
-                    &mut id_out,
+                    &mut track_num_out,
                 )
             };
 
             match result {
                 RESULT_OK => {
-                    assert_ne!(id_out, 0);
-                    Ok(AudioTrackId(id_out))
+                    assert_ne!(track_num_out, 0);
+                    Ok(AudioTrackNum(track_num_out))
                 }
                 _ => Err(Error::Unknown),
             }
@@ -366,7 +388,7 @@ pub mod mux {
 
         pub fn set_color(
             &mut self,
-            track: VideoTrackId,
+            track: VideoTrackNum,
             bit_depth: u8,
             subsampling: (bool, bool),
             full_range: bool,

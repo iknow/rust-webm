@@ -14,6 +14,7 @@ pub mod mux {
     pub type WriterSetPosFn = extern "C" fn(*mut c_void, u64) -> bool;
     pub type WriterElementStartNotifyFn = extern "C" fn(*mut c_void, u64, i64);
 
+    // MUSTFIX: Try an enum again
     pub type ResultCode = i32;
 
     /// The function completed without error
@@ -59,8 +60,6 @@ pub mod mux {
         #[link_name = "mux_delete_writer"]
         pub fn delete_writer(writer: WriterMutPtr);
 
-        // MUSTFIX: Result code for other functions
-
         #[link_name = "mux_new_segment"]
         pub fn new_segment() -> SegmentMutPtr;
         #[link_name = "mux_initialize_segment"]
@@ -79,7 +78,7 @@ pub mod mux {
             height: i32,
             number: i32,
             codec_id: u32,
-            id_out: *mut TrackNum,
+            track_num_out: *mut TrackNum,
         ) -> ResultCode;
         #[link_name = "mux_segment_add_audio_track"]
         pub fn segment_add_audio_track(
@@ -88,7 +87,7 @@ pub mod mux {
             channels: i32,
             number: i32,
             codec_id: u32,
-            id_out: *mut TrackNum,
+            track_num_out: *mut TrackNum,
         ) -> ResultCode;
         #[link_name = "mux_segment_add_frame"]
         pub fn segment_add_frame(
