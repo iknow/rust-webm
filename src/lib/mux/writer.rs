@@ -1,13 +1,10 @@
-use ffi::mux::{WriterGetPosFn, WriterSetPosFn};
-
-use crate::ffi;
-use std::ffi::c_void;
-
+use core::ffi::c_void;
+use core::pin::Pin;
+use core::ptr::NonNull;
 use std::io::{Seek, Write};
-use std::pin::Pin;
-use std::ptr::NonNull;
 
 use super::MkvWriter;
+use ffi::mux::{WriterGetPosFn, WriterSetPosFn};
 
 /// RAII semantics for an FFI writer. This is simpler than implementing `Drop` on [`Writer`], which
 /// prevents destructuring.
@@ -53,10 +50,10 @@ where
     mkv_writer: DroppableWriterPtr,
 }
 
-/// SAFETY: `libwebm` does not contain thread-locals or anything that would violate `Send`-safety.
-/// Thus, safety is only conditional on the write destination `T`, hence the `Send` bound on it.
-///
-/// `libwebm` is not thread-safe, however, which is why we do not implement `Sync`.
+// SAFETY: `libwebm` does not contain thread-locals or anything that would violate `Send`-safety.
+// Thus, safety is only conditional on the write destination `T`, hence the `Send` bound on it.
+//
+// `libwebm` is not thread-safe, however, which is why we do not implement `Sync`.
 unsafe impl<T: Send + Write> Send for Writer<T> {}
 
 struct MuxWriterData<T> {
@@ -170,7 +167,9 @@ where
     }
 }
 
-impl<T> MkvWriter for Writer<T>
+// SAFETY: This is only destroyed when the [`Writer`] is, which due to [`Segment::new`](crate::mux::Segment::new)
+// taking ownership of the [`Writer`], always outlives that segment.
+unsafe impl<T> MkvWriter for Writer<T>
 where
     T: Write,
 {

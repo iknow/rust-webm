@@ -1,13 +1,46 @@
 extern crate webm_sys as ffi;
 
 pub mod mux {
-    use crate::ffi;
+    use core::num::NonZeroU64;
 
     mod segment;
     mod writer;
 
-    pub use ffi::mux::TrackNum;
     pub use {segment::Segment, writer::Writer};
+
+    /// The Matroska-level track number. Typically this is wrapped in [`VideoTrackNum`] or [`AudioTrackNum`].
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct TrackNum(NonZeroU64);
+
+    impl TryFrom<u64> for TrackNum {
+        /// The only possible error is out-of-range.
+        type Error = ();
+
+        fn try_from(value: u64) -> Result<Self, Self::Error> {
+            // `libwebm` limitations only allow for a restricted subrange of [1, 126] for track numbers.
+            // However, this limitation is not inherent to WebM, and so we keep the underlying type `NonZeroU64`,
+            // in accordance with Matroska limits, in case this limitation is later removed
+            if value > 126 {
+                return Err(());
+            }
+            let nonzero = NonZeroU64::new(value).ok_or(())?;
+
+            Ok(TrackNum(nonzero))
+        }
+    }
+
+    impl TrackNum {
+        pub(crate) fn try_from_raw(raw: ffi::mux::TrackNum) -> Option<Self> {
+            // The track number types used by `libwebm` are inconsistent.
+            // Matroska allows for 64-bit numbers, but `libwebm` itself only allows
+            // a very restricted subrange of [1, 126].
+            TrackNum::try_from(raw).ok()
+        }
+
+        pub(crate) fn into_raw(self) -> ffi::mux::TrackNum {
+            self.0.into()
+        }
+    }
 
     // MUSTFIX: Needed?
     /// The trait used by [`Segment`] to actually write out WebM data. This is implemented
@@ -24,9 +57,8 @@ pub mod mux {
         fn mkv_writer(&self) -> ffi::mux::WriterMutPtr;
     }
 
-    // MUSTFIX: Assert numbers are [1, 126] as per Matroska limitations
-    #[derive(Clone, Copy, PartialEq, Eq)]
-    pub struct VideoTrackNum(ffi::mux::TrackNum);
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct VideoTrackNum(TrackNum);
 
     impl VideoTrackNum {
         pub fn as_track_number(&self) -> TrackNum {
@@ -34,8 +66,8 @@ pub mod mux {
         }
     }
 
-    #[derive(Clone, Copy, PartialEq, Eq)]
-    pub struct AudioTrackNum(ffi::mux::TrackNum);
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct AudioTrackNum(TrackNum);
 
     impl AudioTrackNum {
         pub fn as_track_number(&self) -> TrackNum {
@@ -43,7 +75,7 @@ pub mod mux {
         }
     }
 
-    #[derive(Eq, PartialEq, Clone, Copy, Debug)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum AudioCodecId {
         Opus,
         Vorbis,
@@ -58,7 +90,7 @@ pub mod mux {
         }
     }
 
-    #[derive(Eq, PartialEq, Clone, Copy, Debug)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum VideoCodecId {
         VP8,
         VP9,
@@ -76,9 +108,13 @@ pub mod mux {
     }
 
     // MUSTFIX
+    /// The error type for this entire crate. More specific error types will
+    /// be added in the future, hence the current marking as non-exhaustive.
     #[derive(Debug)]
     #[non_exhaustive]
     pub enum Error {
+        /// An unknown error occurred. While this is typically the result of
+        /// incorrect parameters to methods, this is not a guarantee.
         Unknown,
     }
 
