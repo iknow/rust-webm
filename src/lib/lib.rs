@@ -209,6 +209,7 @@ pub mod mux {
 
     // MUSTFIX
     #[derive(Debug)]
+    #[non_exhaustive]
     pub enum Error {
         Unknown,
     }
@@ -238,6 +239,7 @@ pub mod mux {
             let ffi = NonNull::new(ffi)?;
             let success = unsafe { ffi::mux::initialize_segment(ffi.as_ptr(), dest.mkv_writer()) };
             if !success {
+                // MUSTFIX
                 return None;
             }
 
@@ -247,15 +249,14 @@ pub mod mux {
             })
         }
 
-        fn segment_ptr(&self) -> ffi::mux::SegmentNonNullPtr {
-            self.ffi.unwrap()
+        fn segment_ptr(&mut self) -> ffi::mux::SegmentMutPtr {
+            self.ffi.unwrap().as_ptr()
         }
 
         pub fn set_app_name(&mut self, name: &str) {
             let name = std::ffi::CString::new(name).unwrap();
-            let ffi_lock = self.segment_ptr();
             unsafe {
-                ffi::mux::mux_set_writing_app(ffi_lock.as_ptr(), name.as_ptr());
+                ffi::mux::mux_set_writing_app(self.segment_ptr(), name.as_ptr());
             }
         }
 
@@ -268,10 +269,9 @@ pub mod mux {
         ) -> Result<VideoTrackId, Error> {
             // MUSTFIX: Do we really need the ability to dictate track_num?
             let mut id_out: TrackNum = 0;
-            let ffi_lock = self.segment_ptr();
             let result = unsafe {
                 ffi::mux::segment_add_video_track(
-                    ffi_lock.as_ptr(),
+                    self.segment_ptr(),
                     width as i32,
                     height as i32,
                     track_num.unwrap_or(0),
@@ -289,17 +289,24 @@ pub mod mux {
             }
         }
 
-        pub fn set_codec_private(&mut self, track_number: TrackNum, data: &[u8]) -> bool {
-            let ffi_lock = self.segment_ptr();
+        pub fn set_codec_private(
+            &mut self,
+            track_number: TrackNum,
+            data: &[u8],
+        ) -> Result<(), Error> {
             let result = unsafe {
                 ffi::mux::segment_set_codec_private(
-                    ffi_lock.as_ptr(),
+                    self.segment_ptr(),
                     track_number,
                     data.as_ptr(),
                     data.len().try_into().unwrap(),
                 )
             };
-            result == RESULT_OK
+
+            match result {
+                RESULT_OK => Ok(()),
+                _ => Err(Error::Unknown),
+            }
         }
 
         pub fn add_audio_track(
@@ -310,10 +317,9 @@ pub mod mux {
             codec: AudioCodecId,
         ) -> Result<AudioTrackId, Error> {
             let mut id_out: TrackNum = 0;
-            let ffi_lock = self.segment_ptr();
             let result = unsafe {
                 ffi::mux::segment_add_audio_track(
-                    ffi_lock.as_ptr(),
+                    self.segment_ptr(),
                     sample_rate,
                     channels,
                     track_num.unwrap_or(0),
@@ -337,12 +343,10 @@ pub mod mux {
             data: &[u8],
             timestamp_ns: u64,
             keyframe: bool,
-        ) -> bool {
-            // MUSTFIX: We don't need to lock anymore
-            let ffi_lock = self.segment_ptr();
+        ) -> Result<(), Error> {
             let result = unsafe {
                 ffi::mux::segment_add_frame(
-                    ffi_lock.as_ptr(),
+                    self.segment_ptr(),
                     track_num,
                     data.as_ptr(),
                     data.len(),
@@ -350,7 +354,11 @@ pub mod mux {
                     keyframe,
                 )
             };
-            result == RESULT_OK
+
+            match result {
+                RESULT_OK => Ok(()),
+                _ => Err(Error::Unknown),
+            }
         }
 
         pub fn set_color(
@@ -359,7 +367,7 @@ pub mod mux {
             bit_depth: u8,
             subsampling: (bool, bool),
             full_range: bool,
-        ) -> bool {
+        ) -> Result<(), Error> {
             // MUSTFIX: Do we want bool or something else?
             let (sampling_horiz, sampling_vert) = subsampling;
             fn to_int(b: bool) -> i32 {
@@ -370,10 +378,9 @@ pub mod mux {
                 }
             }
 
-            let ffi_lock = self.segment_ptr();
             let result = unsafe {
                 ffi::mux::mux_set_color(
-                    ffi_lock.as_ptr(),
+                    self.segment_ptr(),
                     track.0,
                     bit_depth.into(),
                     to_int(sampling_horiz),
@@ -381,7 +388,11 @@ pub mod mux {
                     to_int(full_range),
                 )
             };
-            result == RESULT_OK
+
+            match result {
+                RESULT_OK => Ok(()),
+                _ => Err(Error::Unknown),
+            }
         }
 
         pub fn finalize(mut self, duration: Option<u64>) -> Result<W, W> {
