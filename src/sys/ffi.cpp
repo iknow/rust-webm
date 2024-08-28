@@ -95,18 +95,20 @@ extern "C" {
   MuxSegmentPtr mux_new_segment() {
     return new mkvmuxer::Segment();
   }
-  bool mux_initialize_segment(MuxSegmentPtr segment, MkvWriterPtr writer) {
-    return segment->Init(writer);
+  ResultCode mux_initialize_segment(MuxSegmentPtr segment, MkvWriterPtr writer) {
+    bool success = segment->Init(writer);
+    return success ? ResultCode::Ok : ResultCode::UnknownLibwebmError;
   }
   void mux_set_writing_app(MuxSegmentPtr segment, const char *name) {
     auto info = segment->GetSegmentInfo();
     info->set_writing_app(name);
   }
-  bool mux_finalize_segment(MuxSegmentPtr segment, uint64_t timeCodeDuration) {
+  ResultCode mux_finalize_segment(MuxSegmentPtr segment, uint64_t timeCodeDuration) {
     if (timeCodeDuration) {
       segment->set_duration(timeCodeDuration);
     }
-    return segment->Finalize();
+    bool success = segment->Finalize();
+    return success ? ResultCode::Ok : ResultCode::UnknownLibwebmError;
   }
   void mux_delete_segment(MuxSegmentPtr segment) {
     delete segment;

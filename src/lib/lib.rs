@@ -231,22 +231,25 @@ pub mod mux {
 
     impl<W> Segment<W> {
         /// Note: the supplied writer must have a lifetime larger than the segment.
-        pub fn new(dest: W) -> Option<Self>
+        pub fn new(dest: W) -> Result<Self, Error>
         where
             W: MkvWriter,
         {
             let ffi = unsafe { ffi::mux::new_segment() };
-            let ffi = NonNull::new(ffi)?;
-            let success = unsafe { ffi::mux::initialize_segment(ffi.as_ptr(), dest.mkv_writer()) };
-            if !success {
-                // MUSTFIX
-                return None;
+            let ffi = NonNull::new(ffi).ok_or(Error::Unknown)?;
+            let result = unsafe { ffi::mux::initialize_segment(ffi.as_ptr(), dest.mkv_writer()) };
+            match result {
+                RESULT_OK => Ok(Segment {
+                    ffi: Some(ffi),
+                    writer: Some(dest),
+                }),
+                _ => {
+                    unsafe {
+                        ffi::mux::delete_segment(ffi.as_ptr());
+                    }
+                    Err(Error::Unknown)
+                }
             }
-
-            Some(Segment {
-                ffi: Some(ffi),
-                writer: Some(dest),
-            })
         }
 
         fn segment_ptr(&mut self) -> ffi::mux::SegmentMutPtr {
@@ -407,7 +410,7 @@ pub mod mux {
 
             let writer = self.writer.take().unwrap();
 
-            if result {
+            if result == RESULT_OK {
                 Ok(writer)
             } else {
                 Err(writer)

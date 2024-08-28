@@ -64,11 +64,11 @@ pub mod mux {
         #[link_name = "mux_new_segment"]
         pub fn new_segment() -> SegmentMutPtr;
         #[link_name = "mux_initialize_segment"]
-        pub fn initialize_segment(segment: SegmentMutPtr, writer: WriterMutPtr) -> bool;
+        pub fn initialize_segment(segment: SegmentMutPtr, writer: WriterMutPtr) -> ResultCode;
         #[link_name = "mux_set_writing_app"]
         pub fn mux_set_writing_app(segment: SegmentMutPtr, name: *const c_char);
         #[link_name = "mux_finalize_segment"]
-        pub fn finalize_segment(segment: SegmentMutPtr, duration: u64) -> bool;
+        pub fn finalize_segment(segment: SegmentMutPtr, duration: u64) -> ResultCode;
         #[link_name = "mux_delete_segment"]
         pub fn delete_segment(segment: SegmentMutPtr);
 
@@ -115,7 +115,7 @@ pub mod mux {
             sampling_horiz: c_int,
             sampling_vert: c_int,
             full_range: c_int,
-        ) -> c_int;
+        ) -> ResultCode;
     }
 }
 
