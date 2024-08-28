@@ -8,11 +8,11 @@ use ffi::mux::{WriterGetPosFn, WriterSetPosFn};
 
 /// RAII semantics for an FFI writer. This is simpler than implementing `Drop` on [`Writer`], which
 /// prevents destructuring.
-struct DroppableWriterPtr {
+struct OwnedWriterPtr {
     writer: ffi::mux::WriterNonNullPtr,
 }
 
-impl DroppableWriterPtr {
+impl OwnedWriterPtr {
     /// ## Safety
     /// `writer` must be a valid, non-dangling pointer to an FFI writer created with [`ffi::mux::new_writer`].
     /// After construction, `writer` must not be used by the caller, except via [`Self::as_ptr`].
@@ -26,7 +26,7 @@ impl DroppableWriterPtr {
     }
 }
 
-impl Drop for DroppableWriterPtr {
+impl Drop for OwnedWriterPtr {
     fn drop(&mut self) {
         // SAFETY: We are assumed to be the only one allowed to delete this writer (per the requirements of [`Self::new`]).
         unsafe {
@@ -47,7 +47,7 @@ where
     T: Write,
 {
     writer_data: Pin<Box<MuxWriterData<T>>>,
-    mkv_writer: DroppableWriterPtr,
+    mkv_writer: OwnedWriterPtr,
 }
 
 // SAFETY: `libwebm` does not contain thread-locals or anything that would violate `Send`-safety.
@@ -134,7 +134,7 @@ where
 
         Writer {
             writer_data,
-            mkv_writer: unsafe { DroppableWriterPtr::new(NonNull::new(mkv_writer).unwrap()) },
+            mkv_writer: unsafe { OwnedWriterPtr::new(NonNull::new(mkv_writer).unwrap()) },
         }
     }
 }
