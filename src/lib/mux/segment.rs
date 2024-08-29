@@ -1,4 +1,4 @@
-use core::ptr::NonNull;
+use std::ptr::NonNull;
 
 use super::{AudioCodecId, AudioTrackNum, Error, MkvWriter, TrackNum, VideoCodecId, VideoTrackNum};
 use ffi::mux::{TrackNum as RawTrackNum, RESULT_OK};

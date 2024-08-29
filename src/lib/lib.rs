@@ -1,7 +1,35 @@
+//! A crate for muxing one or more video/audio streams into a WebM file.
+//!
+//! Note that this crate is only for muxing media that has already been encoded with the appropriate codec.
+//! Consider a crate such as `vpx` if you need encoding as well.
+//!
+//! Actual writing of muxed data is done through a [`mux::Writer`], which lets you supply your own implementation.
+//! This makes it easy to support muxing to files, in-memory buffers, or whatever else you need. Once you have
+//! a [`mux::Writer`], you can create a [`mux::Segment`] to which you can add tracks and media frames.
+//!
+//! In typical usage of this library, where you might mux to a WebM file, you would do:
+//! ```no_run
+//! use std::fs::File;
+//! use webm::mux::{Segment, VideoCodecId, Writer};
+//!
+//! let file = File::open("./my-cool-file.webm").unwrap();
+//! let writer = Writer::new(file);
+//! let mut segment = Segment::new(writer).unwrap();
+//!
+//! // Add some video data
+//! let video_track_num = segment.add_video_track(640, 480, None, VideoCodecId::VP8).unwrap();
+//! let encoded_video_frame: &[u8] = &[]; // TODO: Your video data here
+//! segment.add_frame(video_track_num.as_track_number(), encoded_video_frame, 0, true);
+//! // TODO: More video frames
+//!
+//! // Done writing frames, finish off the file
+//! _ = segment.finalize(None).inspect_err(|_| eprintln!("Could not finalize WebM file"));
+//! ```
+
 extern crate webm_sys as ffi;
 
 pub mod mux {
-    use core::num::NonZeroU64;
+    use std::num::NonZeroU64;
 
     mod segment;
     mod writer;

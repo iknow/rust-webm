@@ -1,7 +1,7 @@
-use core::ffi::c_void;
-use core::pin::Pin;
-use core::ptr::NonNull;
+use std::ffi::c_void;
 use std::io::{Seek, Write};
+use std::pin::Pin;
+use std::ptr::NonNull;
 
 use super::MkvWriter;
 use ffi::mux::{WriterGetPosFn, WriterSetPosFn};
